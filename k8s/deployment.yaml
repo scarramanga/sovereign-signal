@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sovereign-signal
+  namespace: sovereign-signal
+  labels:
+    app: sovereign-signal
+    environment: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sovereign-signal
+  template:
+    metadata:
+      labels:
+        app: sovereign-signal
+        environment: production
+    spec:
+      imagePullSecrets:
+        - name: registry-docr-prod
+      containers:
+        - name: sovereign-signal
+          image: registry.digitalocean.com/docr-prod/sovereign-signal:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: sovereign-signal-config
+            - secretRef:
+                name: sovereign-signal-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
