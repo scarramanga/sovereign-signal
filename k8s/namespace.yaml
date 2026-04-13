@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sovereign-signal
+  labels:
+    app: sovereign-signal
+    environment: production

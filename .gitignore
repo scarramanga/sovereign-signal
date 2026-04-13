@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.DS_Store
+*.kubeconfig
+secrets.yaml.local
