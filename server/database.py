@@ -6,7 +6,8 @@ engine = None
 AsyncSessionLocal = None
 
 if settings.database_url:
-    engine = create_async_engine(settings.database_url, echo=False)
+    db_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    engine = create_async_engine(db_url, echo=False)
     AsyncSessionLocal = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
