@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 VOICE_AND_TONE = (Path(__file__).parent.parent / "content" / "voice_and_tone.md").read_text()
 
-LINKEDIN_PROFILE_ACTIVITY_URL = "https://www.linkedin.com/in/me/recent-activity/all/"
+LINKEDIN_PROFILE_ACTIVITY_URL = "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/"
 BASE_URL = os.environ.get("SS_BASE_URL", settings.ss_base_url)
 
 
