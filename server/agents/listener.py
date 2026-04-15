@@ -124,7 +124,9 @@ async def scrape_posts_and_comments(cookies_json: str, user_agent: str) -> list[
                 await page.wait_for_timeout(5000)
 
                 html = await page.content()
-                logger.info("PAGE HTML SAMPLE: %s", html[10000:14000])
+                with open("/tmp/linkedin_debug.html", "w") as f:
+                    f.write(html)
+                logger.info("PAGE HTML written to /tmp/linkedin_debug.html — length: %d", len(html))
 
                 # Click "Load more comments" if visible
                 try:
