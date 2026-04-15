@@ -2,9 +2,11 @@
 
 import asyncio
 import json
+from typing import Any
 
 from fastapi import APIRouter
 from playwright.async_api import async_playwright
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from server.database import AsyncSessionLocal
@@ -12,9 +14,41 @@ from server.services.session_service import validate_session as validate_session
 
 router = APIRouter()
 
+
+class SessionImportRequest(BaseModel):
+    cookies: list[dict[str, Any]]
+    user_agent: str
+
 LINKEDIN_LOGIN_URL = "https://www.linkedin.com/login"
 CAPTURE_TIMEOUT_SECONDS = 120
 POLL_INTERVAL_SECONDS = 2
+
+
+@router.post("/import")
+async def import_session(body: SessionImportRequest):
+    """Import a session captured externally (e.g. from a local Playwright script)."""
+    if AsyncSessionLocal is None:
+        return {"status": "error", "message": "Database not configured"}
+
+    try:
+        cookies_json = json.dumps(body.cookies)
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text(
+                    "INSERT INTO ss_sessions (platform, cookies, user_agent, valid) "
+                    "VALUES ('linkedin', :cookies, :ua, true) "
+                    "RETURNING id"
+                ),
+                {"cookies": cookies_json, "ua": body.user_agent},
+            )
+            row = result.fetchone()
+            await db.commit()
+
+        return {"session_id": row[0], "valid": True}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @router.post("/capture")
