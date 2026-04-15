@@ -63,7 +63,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
 
         page = context.new_page()
         page.goto(SS_LINKEDIN_PROFILE, wait_until="domcontentloaded")
-        page.wait_for_timeout(8000)
+        page.wait_for_timeout(15000)
 
         # Scroll to load more posts
         for _ in range(5):
