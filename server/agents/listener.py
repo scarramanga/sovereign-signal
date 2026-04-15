@@ -115,11 +115,16 @@ async def scrape_posts_and_comments(cookies_json: str, user_agent: str) -> list[
             if len(post_urls) >= 5:
                 break
 
+        logger.info("Post URLs found: %s", post_urls)
+
         # Visit each post and scrape comments
         for post_url in post_urls:
             try:
                 await page.goto(post_url, wait_until="domcontentloaded")
                 await page.wait_for_timeout(2000)
+
+                html = await page.content()
+                logger.info("PAGE HTML SAMPLE: %s", html[:3000])
 
                 # Click "Load more comments" if visible
                 try:
