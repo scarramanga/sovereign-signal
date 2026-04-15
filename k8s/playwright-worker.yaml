@@ -19,9 +19,15 @@ spec:
         - name: playwright-worker
           image: registry.digitalocean.com/docr-prod/sovereign-signal:latest
           command: ["python", "-m", "server.workers.playwright_worker"]
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: sovereign-signal-secrets
-                  key: DATABASE_URL
+          envFrom:
+            - configMapRef:
+                name: sovereign-signal-config
+            - secretRef:
+                name: sovereign-signal-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"

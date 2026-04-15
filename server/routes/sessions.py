@@ -8,12 +8,11 @@ from playwright.async_api import async_playwright
 from sqlalchemy import text
 
 from server.database import AsyncSessionLocal
+from server.services.session_service import validate_session as validate_session_live
 
 router = APIRouter()
 
 LINKEDIN_LOGIN_URL = "https://www.linkedin.com/login"
-LINKEDIN_FEED_URL = "https://www.linkedin.com/feed/"
-LOGIN_INDICATORS = ["/login", "/checkpoint"]
 CAPTURE_TIMEOUT_SECONDS = 120
 POLL_INTERVAL_SECONDS = 2
 
@@ -140,24 +139,8 @@ async def validate_session():
 
         session_id, cookies_text, user_agent = row[0], row[1], row[2]
 
-        # Launch headless browser and restore cookies
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"],
-            )
-            context = await browser.new_context(user_agent=user_agent or "")
-
-            cookie_list = json.loads(cookies_text)
-            await context.add_cookies(cookie_list)
-
-            page = await context.new_page()
-            await page.goto(LINKEDIN_FEED_URL, wait_until="domcontentloaded")
-
-            final_url = page.url
-            await browser.close()
-
-        is_valid = not any(indicator in final_url for indicator in LOGIN_INDICATORS)
+        # Validate session using shared service
+        is_valid = await validate_session_live(cookies_text, user_agent or "")
 
         # Update session status in database
         async with AsyncSessionLocal() as db:

@@ -5,41 +5,15 @@ Session capture is triggered via the FastAPI API, not this worker.
 """
 
 import asyncio
-import json
 import logging
 
-from playwright.async_api import async_playwright
 from sqlalchemy import text
 
 from server.database import AsyncSessionLocal
+from server.services.session_service import validate_session
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
-
-LINKEDIN_FEED_URL = "https://www.linkedin.com/feed/"
-LOGIN_INDICATORS = ["/login", "/checkpoint"]
-
-
-async def validate_session(session_id: int, cookies: str, user_agent: str) -> bool:
-    """Validate a stored LinkedIn session by loading cookies and checking for redirects."""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"],
-        )
-        context = await browser.new_context(user_agent=user_agent)
-
-        cookie_list = json.loads(cookies)
-        await context.add_cookies(cookie_list)
-
-        page = await context.new_page()
-        await page.goto(LINKEDIN_FEED_URL, wait_until="domcontentloaded")
-
-        final_url = page.url
-        await browser.close()
-
-    is_valid = not any(indicator in final_url for indicator in LOGIN_INDICATORS)
-    return is_valid
 
 
 async def validate_stored_sessions():
@@ -65,7 +39,7 @@ async def validate_stored_sessions():
         session_id, cookies, user_agent = row[0], row[1], row[2]
         logger.info("Validating session %s", session_id)
         try:
-            is_valid = await validate_session(session_id, cookies, user_agent or "")
+            is_valid = await validate_session(cookies, user_agent or "")
             async with AsyncSessionLocal() as db:
                 if is_valid:
                     await db.execute(
