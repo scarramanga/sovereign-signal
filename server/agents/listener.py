@@ -57,9 +57,9 @@ async def mark_comment_seen(cid: str) -> None:
 
 async def draft_reply(commenter_name: str, comment_text: str) -> str:
     """Generate a draft reply in Andy's voice using the Claude API."""
-    client = anthropic.Anthropic()
+    client = anthropic.AsyncAnthropic()
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1000,
         system=VOICE_AND_TONE,
