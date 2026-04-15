@@ -85,9 +85,22 @@ async def scrape_posts_and_comments(cookies_json: str, user_agent: str) -> list[
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"],
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
-        context = await browser.new_context(user_agent=user_agent)
+        context = await browser.new_context(
+            user_agent=user_agent,
+            viewport={"width": 1280, "height": 800},
+            java_script_enabled=True,
+            extra_http_headers={
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            },
+        )
+        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         cookie_list = json.loads(cookies_json)
         await context.add_cookies(cookie_list)
