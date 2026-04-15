@@ -1,6 +1,5 @@
-"""Listener agent — watches LinkedIn comments, drafts replies via Claude, sends approval emails."""
+"""Listener agent — shared functions for comment processing, Claude drafting, and email approval."""
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -10,7 +9,6 @@ from pathlib import Path
 
 import anthropic
 import resend
-from playwright.async_api import async_playwright
 from sqlalchemy import text
 
 from server.config import settings
@@ -21,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 VOICE_AND_TONE = (Path(__file__).parent.parent / "content" / "voice_and_tone.md").read_text()
 
-LINKEDIN_PROFILE_ACTIVITY_URL = "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/"
 BASE_URL = os.environ.get("SS_BASE_URL", settings.ss_base_url)
 
 
@@ -29,26 +26,6 @@ def comment_id_hash(post_url: str, commenter: str, comment_text: str) -> str:
     """Generate a stable hash for a comment to track 'seen' status."""
     raw = f"{post_url}|{commenter}|{comment_text}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
-
-
-async def get_active_session() -> tuple[str, str] | None:
-    """Fetch the most recent valid LinkedIn session (cookies JSON + user_agent)."""
-    if AsyncSessionLocal is None:
-        return None
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            text(
-                "SELECT cookies, user_agent FROM ss_sessions "
-                "WHERE platform = 'linkedin' AND valid = true "
-                "ORDER BY created_at DESC LIMIT 1"
-            )
-        )
-        row = result.fetchone()
-
-    if row is None:
-        return None
-    return row[0], row[1] or ""
 
 
 async def is_comment_seen(cid: str) -> bool:
@@ -78,121 +55,11 @@ async def mark_comment_seen(cid: str) -> None:
         await db.commit()
 
 
-async def scrape_posts_and_comments(cookies_json: str, user_agent: str) -> list[dict]:
-    """Scrape Andy's recent LinkedIn posts and their comments using Playwright."""
-    comments_found: list[dict] = []
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        )
-        context = await browser.new_context(
-            user_agent=user_agent,
-            viewport={"width": 1280, "height": 800},
-            java_script_enabled=True,
-            extra_http_headers={
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            },
-        )
-        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
-        cookie_list = json.loads(cookies_json)
-        await context.add_cookies(cookie_list)
-
-        page = await context.new_page()
-        await page.goto(LINKEDIN_PROFILE_ACTIVITY_URL, wait_until="domcontentloaded")
-        await page.wait_for_timeout(3000)
-
-        # Collect post links from the activity feed (up to 5)
-        post_elements = await page.query_selector_all(
-            "a[href*='/feed/update/']"
-        )
-        post_urls: list[str] = []
-        seen_urls: set[str] = set()
-        for el in post_elements:
-            href = await el.get_attribute("href")
-            if href and "/feed/update/" in href:
-                # Normalise to absolute URL without query params
-                clean = href.split("?")[0]
-                if clean not in seen_urls:
-                    seen_urls.add(clean)
-                    if not clean.startswith("http"):
-                        clean = f"https://www.linkedin.com{clean}"
-                    post_urls.append(clean)
-            if len(post_urls) >= 5:
-                break
-
-        logger.info("Post URLs found: %s", post_urls)
-
-        # Visit each post and scrape comments
-        for post_url in post_urls:
-            try:
-                await page.goto(post_url, wait_until="networkidle")
-                await page.wait_for_timeout(5000)
-
-                html = await page.content()
-                with open("/tmp/linkedin_debug.html", "w") as f:
-                    f.write(html)
-                logger.info("PAGE HTML written to /tmp/linkedin_debug.html — length: %d", len(html))
-
-                # Click "Load more comments" if visible
-                try:
-                    load_more = page.locator("button:has-text('Load more comments')")
-                    if await load_more.count() > 0:
-                        await load_more.first.click()
-                        await page.wait_for_timeout(1500)
-                except Exception:
-                    pass
-
-                # Extract comments
-                comment_elements = await page.query_selector_all(
-                    "article.comments-comment-item"
-                )
-                for cel in comment_elements:
-                    try:
-                        name_el = await cel.query_selector(
-                            "span.comments-post-meta__name-text"
-                        )
-                        text_el = await cel.query_selector(
-                            "span.comments-comment-item__main-content"
-                        )
-                        commenter_name = (
-                            (await name_el.inner_text()).strip() if name_el else "Unknown"
-                        )
-                        comment_text = (
-                            (await text_el.inner_text()).strip() if text_el else ""
-                        )
-                        if comment_text:
-                            comments_found.append(
-                                {
-                                    "post_url": post_url,
-                                    "commenter_name": commenter_name,
-                                    "comment_text": comment_text,
-                                }
-                            )
-                    except Exception:
-                        continue
-
-            except Exception as exc:
-                logger.warning("Failed to scrape post %s: %s", post_url, exc)
-                continue
-
-        await browser.close()
-
-    return comments_found
-
-
 async def draft_reply(commenter_name: str, comment_text: str) -> str:
     """Generate a draft reply in Andy's voice using the Claude API."""
-    client = anthropic.Anthropic()
+    client = anthropic.AsyncAnthropic()
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1000,
         system=VOICE_AND_TONE,
@@ -286,74 +153,3 @@ async def send_approval_email(
     except Exception as exc:
         logger.error("Failed to send approval email: %s", exc)
         return None
-
-
-async def run_listener() -> None:
-    """Main listener loop: scrape → draft → store → email."""
-    logger.info("Listener agent starting")
-
-    session = await get_active_session()
-    if session is None:
-        logger.warning("No valid LinkedIn session found — aborting")
-        return
-
-    cookies_json, user_agent = session
-
-    logger.info("Scraping recent posts and comments")
-    comments = await scrape_posts_and_comments(cookies_json, user_agent)
-    logger.info("Found %d comments across posts", len(comments))
-
-    new_count = 0
-    for comment in comments:
-        cid = comment_id_hash(
-            comment["post_url"], comment["commenter_name"], comment["comment_text"]
-        )
-
-        if await is_comment_seen(cid):
-            continue
-
-        logger.info("New comment from %s — drafting reply", comment["commenter_name"])
-        try:
-            draft = await draft_reply(comment["commenter_name"], comment["comment_text"])
-        except Exception as exc:
-            logger.error("Claude API error: %s", exc)
-            continue
-
-        approval_id, token = await store_approval(
-            draft,
-            comment["post_url"],
-            comment["commenter_name"],
-            comment["comment_text"],
-            cid,
-        )
-
-        email_id = await send_approval_email(
-            comment["commenter_name"],
-            comment["comment_text"],
-            draft,
-            token,
-        )
-
-        if email_id:
-            async with AsyncSessionLocal() as db:
-                await db.execute(
-                    text(
-                        "UPDATE ss_approvals SET resend_email_id = :eid WHERE id = :aid"
-                    ),
-                    {"eid": email_id, "aid": approval_id},
-                )
-                await db.commit()
-
-        await mark_comment_seen(cid)
-        new_count += 1
-
-    logger.info("Listener agent done — processed %d new comments", new_count)
-
-
-async def main() -> None:
-    """Entry point when run as a standalone module."""
-    await run_listener()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
