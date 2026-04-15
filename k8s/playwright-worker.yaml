@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playwright-worker
+  namespace: sovereign-signal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: playwright-worker
+  template:
+    metadata:
+      labels:
+        app: playwright-worker
+    spec:
+      imagePullSecrets:
+        - name: registry-docr-prod
+      containers:
+        - name: playwright-worker
+          image: registry.digitalocean.com/docr-prod/sovereign-signal:latest
+          command: ["python", "-m", "server.workers.playwright_worker"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-signal-secrets
+                  key: DATABASE_URL
