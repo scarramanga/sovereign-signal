@@ -22,7 +22,7 @@
         <key>SS_API_URL</key>
         <string>http://localhost:8080</string>
         <key>SS_LINKEDIN_PROFILE</key>
-        <string>https://www.linkedin.com/in/andy-boss-b89856/recent-activity/posts/</string>
+        <string>https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/</string>
     </dict>
 </dict>
 </plist>

@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 SS_API_URL = os.environ.get("SS_API_URL", "http://localhost:8080")
 SS_LINKEDIN_PROFILE = os.environ.get(
     "SS_LINKEDIN_PROFILE",
-    "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/posts/",
+    "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/",
 )
 SESSION_FILE = Path.home() / ".sovereign-signal" / "linkedin_session.json"
 
