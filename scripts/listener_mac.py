@@ -46,19 +46,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 "--disable-blink-features=AutomationControlled",
             ],
         )
-        context = browser.new_context(
-            user_agent=user_agent,
-            viewport={"width": 1280, "height": 800},
-            java_script_enabled=True,
-            extra_http_headers={
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            },
-        )
-        context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
-
+        context = browser.new_context()
         context.add_cookies(cookies)
 
         page = context.new_page()
