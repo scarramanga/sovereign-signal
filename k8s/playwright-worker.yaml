@@ -19,6 +19,9 @@ spec:
         - name: playwright-worker
           image: registry.digitalocean.com/docr-prod/sovereign-signal:latest
           command: ["python", "-m", "server.workers.playwright_worker"]
+          env:
+            - name: PYTHONPATH
+              value: /app
           envFrom:
             - configMapRef:
                 name: sovereign-signal-config
