@@ -24,7 +24,6 @@ RUN apt-get update && apt-get install -y \
     libgbm1 \
     libasound2 \
     fonts-unifont \
-    fonts-ubuntu \
     && rm -rf /var/lib/apt/lists/*
 RUN playwright install chromium
 
