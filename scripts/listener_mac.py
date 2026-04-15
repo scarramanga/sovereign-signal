@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 SS_API_URL = os.environ.get("SS_API_URL", "http://localhost:8080")
 SS_LINKEDIN_PROFILE = os.environ.get(
     "SS_LINKEDIN_PROFILE",
-    "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/",
+    "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/posts/",
 )
 SESSION_FILE = Path.home() / ".sovereign-signal" / "linkedin_session.json"
 
@@ -65,6 +65,11 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         page.goto(SS_LINKEDIN_PROFILE, wait_until="domcontentloaded")
         page.wait_for_timeout(3000)
 
+        # Scroll to load more posts
+        for _ in range(3):
+            page.keyboard.press("End")
+            page.wait_for_timeout(2000)
+
         # Collect post links from the activity feed (up to 5)
         post_elements = page.query_selector_all("a[href*='/feed/update/']")
         post_urls: list[str] = []
@@ -100,12 +105,12 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
 
                 # Extract comments
                 comment_elements = page.query_selector_all(
-                    "article.comments-comment-item"
+                    ".comments-thread-item"
                 )
                 for cel in comment_elements:
                     try:
                         name_el = cel.query_selector(
-                            "span.comments-post-meta__name-text"
+                            ".comments-comment-meta__description-title"
                         )
                         text_el = cel.query_selector(
                             "span.comments-comment-item__main-content"
