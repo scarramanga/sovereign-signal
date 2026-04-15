@@ -1,5 +1,6 @@
 """Session management routes for LinkedIn cookie capture and validation."""
 
+import asyncio
 import json
 
 from fastapi import APIRouter
@@ -35,8 +36,6 @@ async def capture_session():
             await page.goto(LINKEDIN_LOGIN_URL, wait_until="domcontentloaded")
 
             # Poll for li_at cookie (indicates successful LinkedIn login)
-            import asyncio
-
             elapsed = 0
             li_at_found = False
             while elapsed < CAPTURE_TIMEOUT_SECONDS:
