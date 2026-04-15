@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y \
     libdrm2 \
     libxkbcommon0 \
     libxcomposite1 \
+    libpango-1.0-0 \
+    libcairo2 \
     libxdamage1 \
     libxfixes3 \
     libxrandr2 \
