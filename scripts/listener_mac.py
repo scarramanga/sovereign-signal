@@ -94,25 +94,38 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                     try:
                         commenter_name = "Unknown"
 
-                        # Try aria-label on the profile image link first
-                        name_el = cel.query_selector("a.comments-comment-meta__image-link")
-                        if not name_el:
-                            # Fallback: any profile link inside the comment
-                            name_el = cel.query_selector("a[href*='/in/']")
+                        # 1. Try inner_text() on the name title span
+                        title_span = cel.query_selector("span.comments-comment-meta__description-title")
+                        if title_span:
+                            name_text = title_span.inner_text().strip()
+                            print(f"DEBUG title_span inner_text: {name_text!r}")
+                            if name_text:
+                                commenter_name = name_text
 
-                        if name_el:
-                            aria = name_el.get_attribute("aria-label") or ""
-                            print(f"DEBUG aria: {aria!r}")
-                            if aria.startswith("View "):
-                                # Strip "View " prefix, then strip trailing possessive/suffix
-                                # e.g. "View Andy Boss\u2019 graphic link" or "View Andy Boss' graphic link"
-                                name_part = aria[5:]
-                                # Split on straight apostrophe, curly apostrophe, or \u2019
-                                for sep in ["\u2019", "'", "\u2018"]:
-                                    if sep in name_part:
-                                        name_part = name_part.split(sep)[0]
-                                        break
-                                commenter_name = name_part.strip()
+                        # 2. Fallback: try inner_text() on the name link
+                        if commenter_name == "Unknown":
+                            title_link = cel.query_selector("a.comments-comment-meta__title-link")
+                            if title_link:
+                                name_text = title_link.inner_text().strip()
+                                print(f"DEBUG title_link inner_text: {name_text!r}")
+                                if name_text:
+                                    commenter_name = name_text
+
+                        # 3. Final fallback: aria-label on avatar link
+                        if commenter_name == "Unknown":
+                            img_link = cel.query_selector("a.comments-comment-meta__image-link")
+                            if not img_link:
+                                img_link = cel.query_selector("a[href*='/in/']")
+                            if img_link:
+                                aria = img_link.get_attribute("aria-label") or ""
+                                print(f"DEBUG aria fallback: {aria!r}")
+                                if aria.startswith("View "):
+                                    name_part = aria[5:]
+                                    for sep in ["\u2019", "'", "\u2018"]:
+                                        if sep in name_part:
+                                            name_part = name_part.split(sep)[0]
+                                            break
+                                    commenter_name = name_part.strip()
 
                         print(f"DEBUG commenter_name: {commenter_name!r}")
 
