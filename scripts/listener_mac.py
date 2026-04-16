@@ -146,24 +146,34 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 extra_elements = page.query_selector_all(
                     "article.comments-comment-entity"
                 )
-                seen_handles: set[int] = set()
+                # Deduplicate by profile slug extracted from avatar link
+                seen_slugs: set[str] = set()
                 merged: list = []
-                for el in comment_elements:
-                    h = id(el)
-                    if h not in seen_handles:
-                        seen_handles.add(h)
-                        merged.append(el)
-                for el in extra_elements:
-                    h = id(el)
-                    if h not in seen_handles:
-                        seen_handles.add(h)
+                for el in list(comment_elements) + list(extra_elements):
+                    try:
+                        a_link = el.query_selector(
+                            "a.comments-comment-meta__image-link"
+                        )
+                        if not a_link:
+                            a_link = el.query_selector("a[href*='/in/']")
+                        if a_link:
+                            h = a_link.get_attribute("href") or ""
+                            sm = re.search(r"(/in/[^?\"]+)", h)
+                            slug_key = sm.group(1).rstrip("/") if sm else ""
+                        else:
+                            slug_key = ""
+                    except Exception:
+                        slug_key = ""
+                    # Keep elements with no slug (don't silently discard)
+                    if not slug_key or slug_key not in seen_slugs:
+                        if slug_key:
+                            seen_slugs.add(slug_key)
                         merged.append(el)
                 comment_elements = merged
                 print(f"DEBUG post URL: {post_url}")
                 print(
                     f"DEBUG comment_elements count: {len(comment_elements)} "
-                    f"(thread-item: {len(merged) - len(extra_elements)}, "
-                    f"comment-entity extra: {len(extra_elements)})"
+                    f"(unique slugs: {len(seen_slugs)})"
                 )
                 for cel in comment_elements:
                     try:
