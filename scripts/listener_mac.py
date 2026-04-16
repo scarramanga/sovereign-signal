@@ -141,6 +141,8 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 comment_elements = page.query_selector_all(
                     ".comments-thread-item"
                 )
+                print(f"DEBUG post URL: {post_url}")
+                print(f"DEBUG comment_elements count: {len(comment_elements)}")
                 for cel in comment_elements:
                     try:
                         commenter_name = "Unknown"
