@@ -87,23 +87,35 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 except Exception:
                     pass
 
-                # Capture raw HTML and extract names via regex
+                # Capture raw HTML and build name lookup by profile slug
                 html = page.content()
 
-                # Extract all commenter names from aria-label attributes
-                names = re.findall(
-                    r'aria-label="View ([^\'\u2019]+)[\u2019\']\s+graphic link"',
+                name_map: dict[str, str] = {}
+                for m in re.finditer(
+                    r'href="https://www\.linkedin\.com(/in/[^"]+)"[^>]*>.*?aria-label="View ([^\'\u2019]+)[\u2019\']',
                     html,
-                )
-                print(f"DEBUG names_from_html: {names}")
+                    re.DOTALL,
+                ):
+                    slug, name = m.group(1), m.group(2)
+                    if slug not in name_map:
+                        name_map[slug] = name
+                print(f"DEBUG names_from_html: {name_map}")
 
-                # Extract comment texts via Playwright (inner_text works for content)
+                # Extract comment texts via Playwright, look up name by profile slug
                 comment_elements = page.query_selector_all(
                     ".comments-thread-item"
                 )
-                for idx, cel in enumerate(comment_elements):
+                for cel in comment_elements:
                     try:
-                        commenter_name = names[idx] if idx < len(names) else "Unknown"
+                        commenter_name = "Unknown"
+                        a_el = cel.query_selector("a[href*='/in/']")
+                        if a_el:
+                            href = a_el.get_attribute("href") or ""
+                            slug_match = re.search(r"(/in/[^?\"]+)", href)
+                            if slug_match:
+                                commenter_name = name_map.get(
+                                    slug_match.group(1), "Unknown"
+                                )
 
                         # Filter out Andy's own comments
                         if commenter_name == "Andy Boss":
