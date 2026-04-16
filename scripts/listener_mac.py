@@ -92,14 +92,29 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 )
                 for cel in comment_elements:
                     try:
-                        # Try aria-label on the profile link first (most reliable)
-                        name_el = cel.query_selector("a.comments-comment-meta__image-link")
                         commenter_name = "Unknown"
+
+                        # Try aria-label on the profile image link first
+                        name_el = cel.query_selector("a.comments-comment-meta__image-link")
+                        if not name_el:
+                            # Fallback: any profile link inside the comment
+                            name_el = cel.query_selector("a[href*='/in/']")
+
                         if name_el:
                             aria = name_el.get_attribute("aria-label") or ""
-                            # aria-label format: "View Andy Boss'  graphic link"
+                            print(f"DEBUG aria: {aria!r}")
                             if aria.startswith("View "):
-                                commenter_name = aria[5:].split("'")[0].strip()
+                                # Strip "View " prefix, then strip trailing possessive/suffix
+                                # e.g. "View Andy Boss\u2019 graphic link" or "View Andy Boss' graphic link"
+                                name_part = aria[5:]
+                                # Split on straight apostrophe, curly apostrophe, or \u2019
+                                for sep in ["\u2019", "'", "\u2018"]:
+                                    if sep in name_part:
+                                        name_part = name_part.split(sep)[0]
+                                        break
+                                commenter_name = name_part.strip()
+
+                        print(f"DEBUG commenter_name: {commenter_name!r}")
 
                         # Filter out Andy's own comments
                         if commenter_name == "Andy Boss":
