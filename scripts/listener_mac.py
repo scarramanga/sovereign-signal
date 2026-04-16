@@ -116,14 +116,22 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 for cel in comment_elements:
                     try:
                         commenter_name = "Unknown"
-                        a_el = cel.query_selector("a[href*='/in/']")
+                        # Try the avatar image link first (same element BS4 uses)
+                        a_el = cel.query_selector(
+                            "a.comments-comment-meta__image-link"
+                        )
+                        if not a_el:
+                            a_el = cel.query_selector("a[href*='/in/']")
                         if a_el:
                             href = a_el.get_attribute("href") or ""
                             slug_match = re.search(r"(/in/[^?\"]+)", href)
-                            if slug_match:
-                                commenter_name = name_map.get(
-                                    slug_match.group(1), "Unknown"
-                                )
+                            slug = slug_match.group(1) if slug_match else ""
+                            commenter_name = name_map.get(slug, "Unknown")
+                            print(
+                                f"DEBUG slug={slug!r}, "
+                                f"name={name_map.get(slug, 'MISSING')}, "
+                                f"href={href[:80]!r}"
+                            )
 
                         # Filter out Andy's own comments
                         if commenter_name == "Andy Boss":
