@@ -86,6 +86,15 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 except Exception:
                     pass
 
+                # Wait for aria-label attributes to populate on comment elements
+                try:
+                    page.wait_for_selector(
+                        "a.comments-comment-meta__image-link[aria-label]",
+                        timeout=10000,
+                    )
+                except Exception:
+                    pass
+
                 # Extract comments
                 comment_elements = page.query_selector_all(
                     ".comments-thread-item"
