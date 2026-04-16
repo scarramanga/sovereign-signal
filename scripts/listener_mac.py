@@ -141,8 +141,30 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 comment_elements = page.query_selector_all(
                     ".comments-thread-item"
                 )
+                # Also collect from broader selector to catch comments
+                # outside standard thread-item containers
+                extra_elements = page.query_selector_all(
+                    "article.comments-comment-entity"
+                )
+                seen_handles: set[int] = set()
+                merged: list = []
+                for el in comment_elements:
+                    h = id(el)
+                    if h not in seen_handles:
+                        seen_handles.add(h)
+                        merged.append(el)
+                for el in extra_elements:
+                    h = id(el)
+                    if h not in seen_handles:
+                        seen_handles.add(h)
+                        merged.append(el)
+                comment_elements = merged
                 print(f"DEBUG post URL: {post_url}")
-                print(f"DEBUG comment_elements count: {len(comment_elements)}")
+                print(
+                    f"DEBUG comment_elements count: {len(comment_elements)} "
+                    f"(thread-item: {len(merged) - len(extra_elements)}, "
+                    f"comment-entity extra: {len(extra_elements)})"
+                )
                 for cel in comment_elements:
                     try:
                         commenter_name = "Unknown"
