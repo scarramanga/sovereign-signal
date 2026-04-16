@@ -111,8 +111,8 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                     try:
                         commenter_name = "Unknown"
 
-                        # 1. Try inner_text() on the name title span
-                        title_span = cel.query_selector("span.comments-comment-meta__description-title")
+                        # 1. Try inner_text() on the name title span (full path through container)
+                        title_span = cel.query_selector("a.comments-comment-meta__description-container span.comments-comment-meta__description-title")
                         if title_span:
                             name_text = title_span.inner_text().strip()
                             print(f"DEBUG title_span inner_text: {name_text!r}")
