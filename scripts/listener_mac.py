@@ -8,6 +8,7 @@ sovereign-signal pod for Claude drafting and email approval.
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -72,7 +73,6 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         print(f"Post URLs found: {post_urls}")
 
         # Visit each post and scrape comments
-        html_dumped = False
         for post_url in post_urls:
             try:
                 page.goto(post_url, wait_until="domcontentloaded")
@@ -87,64 +87,23 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 except Exception:
                     pass
 
-                # Wait for aria-label attributes to populate on comment elements
-                try:
-                    page.wait_for_selector(
-                        "a.comments-comment-meta__image-link[aria-label]",
-                        timeout=10000,
-                    )
-                except Exception:
-                    pass
+                # Capture raw HTML and extract names via regex
+                html = page.content()
 
-                # Dump raw HTML for the first post only
-                if not html_dumped:
-                    with open("/tmp/linkedin_dump.html", "w") as f:
-                        f.write(page.content())
-                    print("DEBUG: HTML dumped to /tmp/linkedin_dump.html")
-                    html_dumped = True
+                # Extract all commenter names from aria-label attributes
+                names = re.findall(
+                    r'aria-label="View ([^\'\u2019]+)[\u2019\']\s+graphic link"',
+                    html,
+                )
+                print(f"DEBUG names_from_html: {names}")
 
-                # Extract comments
+                # Extract comment texts via Playwright (inner_text works for content)
                 comment_elements = page.query_selector_all(
                     ".comments-thread-item"
                 )
-                for cel in comment_elements:
+                for idx, cel in enumerate(comment_elements):
                     try:
-                        commenter_name = "Unknown"
-
-                        # 1. Try inner_text() on the name title span (full path through container)
-                        title_span = cel.query_selector("a.comments-comment-meta__description-container span.comments-comment-meta__description-title")
-                        if title_span:
-                            name_text = title_span.inner_text().strip()
-                            print(f"DEBUG title_span inner_text: {name_text!r}")
-                            if name_text:
-                                commenter_name = name_text
-
-                        # 2. Fallback: try inner_text() on the name link
-                        if commenter_name == "Unknown":
-                            title_link = cel.query_selector("a.comments-comment-meta__title-link")
-                            if title_link:
-                                name_text = title_link.inner_text().strip()
-                                print(f"DEBUG title_link inner_text: {name_text!r}")
-                                if name_text:
-                                    commenter_name = name_text
-
-                        # 3. Final fallback: aria-label on avatar link
-                        if commenter_name == "Unknown":
-                            img_link = cel.query_selector("a.comments-comment-meta__image-link")
-                            if not img_link:
-                                img_link = cel.query_selector("a[href*='/in/']")
-                            if img_link:
-                                aria = img_link.get_attribute("aria-label") or ""
-                                print(f"DEBUG aria fallback: {aria!r}")
-                                if aria.startswith("View "):
-                                    name_part = aria[5:]
-                                    for sep in ["\u2019", "'", "\u2018"]:
-                                        if sep in name_part:
-                                            name_part = name_part.split(sep)[0]
-                                            break
-                                    commenter_name = name_part.strip()
-
-                        print(f"DEBUG commenter_name: {commenter_name!r}")
+                        commenter_name = names[idx] if idx < len(names) else "Unknown"
 
                         # Filter out Andy's own comments
                         if commenter_name == "Andy Boss":
