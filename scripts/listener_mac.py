@@ -92,14 +92,21 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 )
                 for cel in comment_elements:
                     try:
-                        name_el = cel.query_selector(
-                            ".comments-comment-meta__description-title"
-                        )
+                        # Try aria-label on the profile link first (most reliable)
+                        name_el = cel.query_selector("a.comments-comment-meta__image-link")
+                        commenter_name = "Unknown"
+                        if name_el:
+                            aria = name_el.get_attribute("aria-label") or ""
+                            # aria-label format: "View Andy Boss'  graphic link"
+                            if aria.startswith("View "):
+                                commenter_name = aria[5:].split("'")[0].strip()
+
+                        # Filter out Andy's own comments
+                        if commenter_name == "Andy Boss":
+                            continue
+
                         text_el = cel.query_selector(
                             "span.comments-comment-item__main-content"
-                        )
-                        commenter_name = (
-                            name_el.inner_text().strip() if name_el else "Unknown"
                         )
                         comment_text = (
                             text_el.inner_text().strip() if text_el else ""
