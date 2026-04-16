@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 SS_API_URL = os.environ.get("SS_API_URL", "http://localhost:8080")
 SS_LINKEDIN_PROFILE = os.environ.get(
     "SS_LINKEDIN_PROFILE",
-    "https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/",
+    "https://www.linkedin.com/in/andy-boss-b89856/",
 )
 SESSION_FILE = Path.home() / ".sovereign-signal" / "linkedin_session.json"
 
@@ -52,15 +52,6 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         page = context.new_page()
         page.goto(SS_LINKEDIN_PROFILE, wait_until="domcontentloaded")
         page.wait_for_timeout(8000)
-
-        # Click the Posts tab to filter to Andy's own posts only
-        try:
-            posts_tab = page.locator("button:has-text('Posts')")
-            if posts_tab.count() > 0:
-                posts_tab.first.click()
-                page.wait_for_timeout(10000)
-        except Exception:
-            pass
 
         # Collect post links from the activity feed (up to 5)
         post_elements = page.query_selector_all("a[href*='/feed/update/']")
