@@ -79,14 +79,42 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 page.goto(post_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(5000)
 
-                # Click "Load more comments" if visible
+                # Switch sort order to "Most recent" if the control exists
                 try:
-                    load_more = page.locator("button:has-text('Load more comments')")
-                    if load_more.count() > 0:
-                        load_more.first.click()
-                        page.wait_for_timeout(1500)
+                    sort_btn = page.locator(
+                        "button.comments-sort-order-toggle, "
+                        "button[aria-label*='Sort'], "
+                        "button:has-text('Most relevant')"
+                    )
+                    if sort_btn.count() > 0:
+                        sort_btn.first.click()
+                        page.wait_for_timeout(1000)
+                        # Pick "Most recent" from the dropdown
+                        recent_opt = page.locator(
+                            "li:has-text('Most recent'), "
+                            "div[role='option']:has-text('Most recent'), "
+                            "button:has-text('Most recent')"
+                        )
+                        if recent_opt.count() > 0:
+                            recent_opt.first.click()
+                            page.wait_for_timeout(2000)
                 except Exception:
                     pass
+
+                # Click "Load more comments" repeatedly until all are visible
+                for _ in range(20):
+                    try:
+                        load_more = page.locator(
+                            "button.comments-comments-list__load-more-comments-button, "
+                            "button:has-text('Load more comments')"
+                        )
+                        if load_more.count() > 0 and load_more.first.is_visible():
+                            load_more.first.click()
+                            page.wait_for_timeout(1500)
+                        else:
+                            break
+                    except Exception:
+                        break
 
                 # Capture raw HTML and build name lookup by profile slug
                 html = page.content()
