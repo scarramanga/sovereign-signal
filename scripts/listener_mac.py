@@ -144,6 +144,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                             text_el.inner_text().strip() if text_el else ""
                         )
                         if comment_text:
+                            print(f"DEBUG comment_text={comment_text[:120]!r}")
                             comments_found.append(
                                 {
                                     "post_url": post_url,
