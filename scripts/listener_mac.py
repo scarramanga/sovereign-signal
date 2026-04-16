@@ -58,7 +58,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
             posts_tab = page.locator("button:has-text('Posts')")
             if posts_tab.count() > 0:
                 posts_tab.first.click()
-                page.wait_for_timeout(5000)
+                page.wait_for_timeout(10000)
         except Exception:
             pass
 
