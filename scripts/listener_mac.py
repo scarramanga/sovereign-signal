@@ -72,6 +72,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         print(f"Post URLs found: {post_urls}")
 
         # Visit each post and scrape comments
+        html_dumped = False
         for post_url in post_urls:
             try:
                 page.goto(post_url, wait_until="domcontentloaded")
@@ -94,6 +95,13 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                     )
                 except Exception:
                     pass
+
+                # Dump raw HTML for the first post only
+                if not html_dumped:
+                    with open("/tmp/linkedin_dump.html", "w") as f:
+                        f.write(page.content())
+                    print("DEBUG: HTML dumped to /tmp/linkedin_dump.html")
+                    html_dumped = True
 
                 # Extract comments
                 comment_elements = page.query_selector_all(
