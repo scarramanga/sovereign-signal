@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 
+from bs4 import BeautifulSoup
 import httpx
 from playwright.sync_api import sync_playwright
 
@@ -90,15 +91,22 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                 # Capture raw HTML and build name lookup by profile slug
                 html = page.content()
 
+                soup = BeautifulSoup(html, "html.parser")
                 name_map: dict[str, str] = {}
-                for m in re.finditer(
-                    r'href="https://www\.linkedin\.com(/in/[^"]+)"[^>]*>.*?aria-label="View ([^\'\u2019]+)[\u2019\']',
-                    html,
-                    re.DOTALL,
+                for a in soup.find_all(
+                    "a",
+                    class_=lambda c: c and "comments-comment-meta__image-link" in c,
                 ):
-                    slug, name = m.group(1), m.group(2)
-                    if slug not in name_map:
-                        name_map[slug] = name
+                    href = a.get("href", "")
+                    aria = a.get("aria-label", "")
+                    slug_m = re.search(r"(/in/[^?\"]+)", href)
+                    if slug_m and aria.startswith("View "):
+                        name_part = aria[5:]
+                        for sep in ["\u2019", "'", "\u2018"]:
+                            if sep in name_part:
+                                name_part = name_part.split(sep)[0]
+                                break
+                        name_map[slug_m.group(1)] = name_part.strip()
                 print(f"DEBUG names_from_html: {name_map}")
 
                 # Extract comment texts via Playwright, look up name by profile slug
