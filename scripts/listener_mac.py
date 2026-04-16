@@ -137,12 +137,21 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                         if commenter_name == "Andy Boss":
                             continue
 
+                        # Skip unresolved commenters
+                        if commenter_name == "Unknown":
+                            continue
+
                         text_el = cel.query_selector(
                             "span.comments-comment-item__main-content"
                         )
                         comment_text = (
                             text_el.inner_text().strip() if text_el else ""
                         )
+
+                        # Skip Andy's replies (they start with the commenter's name)
+                        if comment_text.startswith(commenter_name):
+                            continue
+
                         if comment_text:
                             print(f"DEBUG comment_text={comment_text[:120]!r}")
                             comments_found.append(
