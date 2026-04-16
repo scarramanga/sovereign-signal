@@ -106,7 +106,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                             if sep in name_part:
                                 name_part = name_part.split(sep)[0]
                                 break
-                        name_map[slug_m.group(1)] = name_part.strip()
+                        name_map[slug_m.group(1).rstrip("/")] = name_part.strip()
                 print(f"DEBUG names_from_html: {name_map}")
 
                 # Extract comment texts via Playwright, look up name by profile slug
@@ -125,7 +125,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                         if a_el:
                             href = a_el.get_attribute("href") or ""
                             slug_match = re.search(r"(/in/[^?\"]+)", href)
-                            slug = slug_match.group(1) if slug_match else ""
+                            slug = slug_match.group(1).rstrip("/") if slug_match else ""
                             commenter_name = name_map.get(slug, "Unknown")
                             print(
                                 f"DEBUG slug={slug!r}, "
