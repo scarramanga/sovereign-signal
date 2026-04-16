@@ -74,7 +74,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         # Visit each post and scrape comments
         for post_url in post_urls:
             try:
-                page.goto(post_url, wait_until="networkidle")
+                page.goto(post_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(5000)
 
                 # Click "Load more comments" if visible
