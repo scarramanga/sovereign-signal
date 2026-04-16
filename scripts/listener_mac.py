@@ -53,6 +53,15 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         page.goto(SS_LINKEDIN_PROFILE, wait_until="domcontentloaded")
         page.wait_for_timeout(8000)
 
+        # Click the Posts tab to filter to Andy's own posts only
+        try:
+            posts_tab = page.locator("button:has-text('Posts')")
+            if posts_tab.count() > 0:
+                posts_tab.first.click()
+                page.wait_for_timeout(5000)
+        except Exception:
+            pass
+
         # Collect post links from the activity feed (up to 5)
         post_elements = page.query_selector_all("a[href*='/feed/update/']")
         post_urls: list[str] = []
