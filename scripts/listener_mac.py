@@ -289,6 +289,15 @@ def poll_and_post(cookies: list[dict]) -> None:
                 page.goto(post_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(5000)
 
+                # Load all comments before searching for commenter
+                for _ in range(20):
+                    btn = page.locator("button:has-text('Load more comments')")
+                    if btn.count() > 0:
+                        btn.first.click()
+                        page.wait_for_timeout(1500)
+                    else:
+                        break
+
                 # Find the comment by commenter name
                 name_el = page.locator(
                     f"span:has-text('{commenter_name}')"
