@@ -35,7 +35,7 @@ async def post_linkedin_reply(context_json: str, reply_text: str) -> bool:
         return False
 
     cookies_json, user_agent = session_row[0], session_row[1] or ""
-    context = json.loads(context_json)
+    context = context_json if isinstance(context_json, dict) else json.loads(context_json)
     post_url = context.get("post_url", "")
 
     if not post_url:
