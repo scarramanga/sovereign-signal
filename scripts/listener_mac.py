@@ -249,6 +249,113 @@ def post_comment_to_pod(comment: dict) -> None:
         print(f"ERROR: POST {url} failed: {exc}")
 
 
+def poll_and_post(cookies: list[dict]) -> None:
+    """Poll for approved replies and post them to LinkedIn via Playwright."""
+    url = f"{SS_API_URL}/approvals/pending-posts"
+    try:
+        resp = httpx.get(url, timeout=30)
+        if resp.status_code != 200:
+            print(f"ERROR: GET {url} returned {resp.status_code}: {resp.text}")
+            return
+        pending = resp.json()
+    except Exception as exc:
+        print(f"ERROR: GET {url} failed: {exc}")
+        return
+
+    if not pending:
+        print("No pending approved replies to post")
+        return
+
+    print(f"Found {len(pending)} approved replies to post")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        context = browser.new_context()
+        context.add_cookies(cookies)
+
+        for row in pending:
+            try:
+                post_url = row["post_url"]
+                reply_text = row["reply_text"]
+                commenter_name = row["commenter_name"]
+                approval_token = row["approval_token"]
+
+                print(f"Posting reply to {commenter_name} on {post_url}")
+
+                page = context.new_page()
+                page.goto(post_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(5000)
+
+                # Find the comment by commenter name
+                name_el = page.locator(
+                    f"span:has-text('{commenter_name}')"
+                ).first
+                # Scroll to the commenter's element
+                name_el.scroll_into_view_if_needed()
+                page.wait_for_timeout(1000)
+
+                # Find the Reply button within the comment thread
+                # Navigate up to the thread container, then find Reply
+                thread = name_el.locator(
+                    "xpath=ancestor::div[contains(@class, 'comments-comment-entity')]"
+                )
+                reply_btn = thread.locator("button:has-text('Reply')")
+                if reply_btn.count() > 0:
+                    reply_btn.first.click()
+                else:
+                    # Fallback: try clicking Reply near the name element
+                    nearby_reply = name_el.locator(
+                        "xpath=ancestor::div[contains(@class, 'comments-thread-item')]"
+                    ).locator("button:has-text('Reply')")
+                    nearby_reply.first.click()
+
+                page.wait_for_timeout(2000)
+
+                # Type reply into the composer
+                composer = page.locator(
+                    "div.ql-editor[contenteditable='true']"
+                ).last
+                composer.click()
+                composer.fill(reply_text)
+                page.wait_for_timeout(1000)
+
+                # Click the Post/Submit button
+                submit_btn = page.locator(
+                    "button.comments-comment-box__submit-button"
+                )
+                if submit_btn.count() > 0:
+                    submit_btn.first.click()
+                    page.wait_for_timeout(3000)
+
+                    # Mark as posted only after successful submission
+                    mark_url = f"{SS_API_URL}/approvals/mark-posted"
+                    mark_resp = httpx.post(
+                        mark_url,
+                        json={"approval_token": approval_token},
+                        timeout=30,
+                    )
+                    if mark_resp.status_code == 200:
+                        print(f"Posted reply to {commenter_name}")
+                    else:
+                        print(
+                            f"ERROR: mark-posted returned {mark_resp.status_code}: "
+                            f"{mark_resp.text}"
+                        )
+                else:
+                    raise Exception("Submit button not found")
+
+                page.close()
+
+            except Exception as exc:
+                print(f"ERROR: Failed to post reply to {row.get('commenter_name', '?')}: {exc}")
+                continue
+
+        browser.close()
+
+
 def main() -> None:
     print("sovereign-signal Mac listener starting")
 
@@ -260,6 +367,9 @@ def main() -> None:
 
     for comment in comments:
         post_comment_to_pod(comment)
+
+    # Poll for approved replies and post them
+    poll_and_post(cookies)
 
     print("sovereign-signal Mac listener done")
 

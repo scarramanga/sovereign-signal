@@ -3,9 +3,9 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Query
-from fastapi.responses import HTMLResponse
-from playwright.async_api import async_playwright
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from server.database import AsyncSessionLocal
@@ -15,75 +15,8 @@ router = APIRouter()
 APPROVAL_EXPIRY_HOURS = 48
 
 
-async def post_linkedin_reply(context_json: str, reply_text: str) -> bool:
-    """Post a reply to a LinkedIn comment using the active session."""
-    if AsyncSessionLocal is None:
-        return False
-
-    # Fetch active session
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            text(
-                "SELECT cookies, user_agent FROM ss_sessions "
-                "WHERE platform = 'linkedin' AND valid = true "
-                "ORDER BY created_at DESC LIMIT 1"
-            )
-        )
-        session_row = result.fetchone()
-
-    if session_row is None:
-        return False
-
-    cookies_json, user_agent = session_row[0], session_row[1] or ""
-    context = context_json if isinstance(context_json, dict) else json.loads(context_json)
-    post_url = context.get("post_url", "")
-
-    if not post_url:
-        return False
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"],
-        )
-        browser_context = await browser.new_context(user_agent=user_agent)
-
-        cookie_list = json.loads(cookies_json)
-        await browser_context.add_cookies(cookie_list)
-
-        page = await browser_context.new_page()
-        await page.goto(post_url, wait_until="domcontentloaded")
-        await page.wait_for_timeout(2000)
-
-        try:
-            # Look for the comment reply box
-            reply_button = page.locator("button:has-text('Reply')")
-            if await reply_button.count() > 0:
-                await reply_button.first.click()
-                await page.wait_for_timeout(1000)
-
-            # Find the comment input and type the reply
-            comment_box = page.locator(
-                "div.ql-editor[contenteditable='true']"
-            ).last
-            await comment_box.click()
-            await comment_box.fill(reply_text)
-            await page.wait_for_timeout(500)
-
-            # Submit the comment
-            submit_button = page.locator(
-                "button.comments-comment-box__submit-button"
-            )
-            if await submit_button.count() > 0:
-                await submit_button.first.click()
-                await page.wait_for_timeout(2000)
-
-            await browser.close()
-            return True
-
-        except Exception:
-            await browser.close()
-            return False
+class MarkPostedRequest(BaseModel):
+    approval_token: str
 
 
 @router.get("/respond", response_class=HTMLResponse)
@@ -149,33 +82,74 @@ async def respond_to_approval(
         reply_text = text_param
         new_status = "edited"
 
-    # Post the reply to LinkedIn
-    posted = await post_linkedin_reply(context_json, reply_text)
-
+    # Mark as approved — Mac-side Playwright will poll and post
     now = datetime.now(timezone.utc)
     async with AsyncSessionLocal() as db:
         await db.execute(
             text(
                 "UPDATE ss_approvals SET "
                 "status = :status, approved_text = :reply, "
-                "approved_at = :now, posted_at = :posted_at, responded_at = :now "
+                "approved_at = :now, responded_at = :now "
                 "WHERE id = :aid"
             ),
             {
                 "status": new_status,
                 "reply": reply_text,
                 "now": now,
-                "posted_at": now if posted else None,
                 "aid": approval_id,
             },
         )
         await db.commit()
 
-    if posted:
-        msg = "Reply posted. You can close this tab."
-        if action == "edit":
-            msg = "Edited reply posted. You can close this tab."
-    else:
-        msg = "Approval recorded but reply could not be posted automatically. Please post manually."
+    return HTMLResponse(
+        "<html><body><h2>Approved. Reply will post within 15 minutes.</h2></body></html>"
+    )
 
-    return HTMLResponse(f"<html><body><p>{msg}</p></body></html>")
+
+@router.get("/pending-posts")
+async def get_pending_posts():
+    """Return approved approvals that have not yet been posted."""
+    if AsyncSessionLocal is None:
+        return JSONResponse([])
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text(
+                "SELECT id, approval_token, context_json, approved_text "
+                "FROM ss_approvals "
+                "WHERE status IN ('approved', 'edited') AND posted_at IS NULL"
+            )
+        )
+        rows = result.fetchall()
+
+    pending = []
+    for row in rows:
+        ctx = row[2] if isinstance(row[2], dict) else json.loads(row[2]) if row[2] else {}
+        pending.append({
+            "id": row[0],
+            "approval_token": row[1],
+            "post_url": ctx.get("post_url", ""),
+            "reply_text": row[3] or "",
+            "commenter_name": ctx.get("commenter_name", ""),
+        })
+
+    return JSONResponse(pending)
+
+
+@router.post("/mark-posted")
+async def mark_posted(body: MarkPostedRequest):
+    """Mark an approved reply as posted."""
+    if AsyncSessionLocal is None:
+        return JSONResponse({"status": "error", "detail": "Database not configured"})
+
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            text(
+                "UPDATE ss_approvals SET posted_at = :now WHERE approval_token = :token"
+            ),
+            {"now": now, "token": body.approval_token},
+        )
+        await db.commit()
+
+    return JSONResponse({"status": "ok"})
