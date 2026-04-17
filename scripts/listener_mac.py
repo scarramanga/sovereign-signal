@@ -330,20 +330,22 @@ def poll_and_post(cookies: list[dict]) -> None:
                     submit_btn.first.click()
                     page.wait_for_timeout(3000)
 
-                # Mark as posted
-                mark_url = f"{SS_API_URL}/approvals/mark-posted"
-                mark_resp = httpx.post(
-                    mark_url,
-                    json={"approval_token": approval_token},
-                    timeout=30,
-                )
-                if mark_resp.status_code == 200:
-                    print(f"Posted reply to {commenter_name}")
-                else:
-                    print(
-                        f"ERROR: mark-posted returned {mark_resp.status_code}: "
-                        f"{mark_resp.text}"
+                    # Mark as posted only after successful submission
+                    mark_url = f"{SS_API_URL}/approvals/mark-posted"
+                    mark_resp = httpx.post(
+                        mark_url,
+                        json={"approval_token": approval_token},
+                        timeout=30,
                     )
+                    if mark_resp.status_code == 200:
+                        print(f"Posted reply to {commenter_name}")
+                    else:
+                        print(
+                            f"ERROR: mark-posted returned {mark_resp.status_code}: "
+                            f"{mark_resp.text}"
+                        )
+                else:
+                    raise Exception("Submit button not found")
 
                 page.close()
 
