@@ -309,17 +309,10 @@ def poll_and_post(cookies: list[dict]) -> None:
                 # Find the Reply button within the comment thread
                 # Navigate up to the thread container, then find Reply
                 thread = name_el.locator(
-                    "xpath=ancestor::div[contains(@class, 'comments-comment-entity')]"
+                    "xpath=ancestor::article[contains(@class, 'comments-comment-entity')]"
                 )
                 reply_btn = thread.locator("button:has-text('Reply')")
-                if reply_btn.count() > 0:
-                    reply_btn.first.click()
-                else:
-                    # Fallback: try clicking Reply near the name element
-                    nearby_reply = name_el.locator(
-                        "xpath=ancestor::div[contains(@class, 'comments-thread-item')]"
-                    ).locator("button:has-text('Reply')")
-                    nearby_reply.first.click()
+                reply_btn.first.click()
 
                 page.wait_for_timeout(2000)
 
