@@ -321,7 +321,7 @@ def poll_and_post(cookies: list[dict]) -> None:
                     "div.ql-editor[contenteditable='true']"
                 ).last
                 composer.click()
-                composer.fill(reply_text)
+                composer.type(reply_text)
                 page.wait_for_timeout(1000)
 
                 # Click the Post/Submit button
