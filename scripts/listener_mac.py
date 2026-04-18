@@ -325,7 +325,7 @@ def poll_and_post(cookies: list[dict]) -> None:
                 page.wait_for_timeout(1000)
 
                 # Click the Post/Submit button
-                submit_btn = thread.locator("button:has-text('Post')")
+                submit_btn = page.locator("button:has-text('Post')")
                 if submit_btn.count() > 0:
                     submit_btn.first.click()
                     page.wait_for_timeout(3000)
