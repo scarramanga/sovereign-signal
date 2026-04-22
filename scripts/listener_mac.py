@@ -347,8 +347,6 @@ def poll_and_post(cookies: list[dict]) -> None:
                 else:
                     raise Exception("Submit button not found")
 
-                page.close()
-
             except Exception as exc:
                 print(f"ERROR: Failed to post reply to {row.get('commenter_name', '?')}: {exc}")
                 continue
