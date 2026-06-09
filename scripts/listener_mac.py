@@ -135,7 +135,6 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                                 name_part = name_part.split(sep)[0]
                                 break
                         name_map[slug_m.group(1).rstrip("/")] = name_part.strip()
-                print(f"DEBUG names_from_html: {name_map}")
 
                 # Extract comment texts via Playwright, look up name by profile slug
                 comment_elements = page.query_selector_all(
@@ -170,11 +169,6 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                             seen_slugs.add(slug_key)
                         merged.append(el)
                 comment_elements = merged
-                print(f"DEBUG post URL: {post_url}")
-                print(
-                    f"DEBUG comment_elements count: {len(comment_elements)} "
-                    f"(unique slugs: {len(seen_slugs)})"
-                )
                 for cel in comment_elements:
                     try:
                         commenter_name = "Unknown"
@@ -189,11 +183,6 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                             slug_match = re.search(r"(/in/[^?\"]+)", href)
                             slug = slug_match.group(1).rstrip("/") if slug_match else ""
                             commenter_name = name_map.get(slug, "Unknown")
-                            print(
-                                f"DEBUG slug={slug!r}, "
-                                f"name={name_map.get(slug, 'MISSING')}, "
-                                f"href={href[:80]!r}"
-                            )
 
                         # Filter out Andy's own comments
                         if commenter_name == "Andy Boss":
@@ -215,7 +204,6 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
                             continue
 
                         if comment_text:
-                            print(f"DEBUG comment_text={comment_text[:120]!r}")
                             comments_found.append(
                                 {
                                     "post_url": post_url,
