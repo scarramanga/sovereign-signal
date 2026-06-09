@@ -107,18 +107,24 @@ async def respond_to_approval(
 
 
 @router.get("/pending-posts")
-async def get_pending_posts():
-    """Return approved approvals that have not yet been posted."""
+async def get_pending_posts(source: str = Query("listener")):
+    """Return approved approvals for a given source that have not yet been posted.
+
+    Source defaults to 'listener' so the existing listener poller is unchanged;
+    the scout poller passes ?source=scout to claim only its own items.
+    """
     if AsyncSessionLocal is None:
         return JSONResponse([])
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text(
-                "SELECT id, approval_token, context_json, approved_text "
+                "SELECT id, approval_token, context_json, approved_text, post_url, post_text "
                 "FROM ss_approvals "
-                "WHERE status IN ('approved', 'edited') AND posted_at IS NULL"
-            )
+                "WHERE status IN ('approved', 'edited') AND posted_at IS NULL "
+                "AND source = :source"
+            ),
+            {"source": source},
         )
         rows = result.fetchall()
 
@@ -128,9 +134,10 @@ async def get_pending_posts():
         pending.append({
             "id": row[0],
             "approval_token": row[1],
-            "post_url": ctx.get("post_url", ""),
+            "post_url": row[4] or ctx.get("post_url", ""),
             "reply_text": row[3] or "",
             "commenter_name": ctx.get("commenter_name", ""),
+            "post_text": row[5] or "",
         })
 
     return JSONResponse(pending)

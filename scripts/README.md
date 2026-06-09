@@ -52,6 +52,18 @@ launchctl load ~/Library/LaunchAgents/com.sovereignsignal.listener.plist
 
 Runs `listener_mac.py` every 900 seconds (15 minutes). Also runs once immediately on load.
 
+### 3. Scout (every 60 minutes)
+
+```bash
+cp scripts/com.sovereignsignal.scout.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.sovereignsignal.scout.plist
+```
+
+Runs `scout_mac.py` every 3600 seconds (1 hour). Scrapes the LinkedIn newsfeed,
+POSTs each post to the pod's `/scout/ingest` for Claude relevance scoring against
+Andy's thesis topics (threshold 0.7), and posts approved comments back to
+LinkedIn. Also runs once immediately on load.
+
 ## Logs
 
 ```bash
@@ -63,12 +75,17 @@ tail -f ~/Library/Logs/sovereign-signal-listener-error.log
 
 # Port-forward output
 tail -f ~/Library/Logs/sovereign-signal-portforward.log
+
+# Scout output / errors
+tail -f ~/Library/Logs/sovereign-signal-scout.log
+tail -f ~/Library/Logs/sovereign-signal-scout-error.log
 ```
 
 ## Manual run
 
 ```bash
 python3 scripts/listener_mac.py
+python3 scripts/scout_mac.py
 ```
 
 ## Environment variables
@@ -76,11 +93,13 @@ python3 scripts/listener_mac.py
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SS_API_URL` | `http://localhost:8080` | Pod API base URL (via port-forward) |
-| `SS_LINKEDIN_PROFILE` | `https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/` | LinkedIn activity feed URL |
+| `SS_LINKEDIN_PROFILE` | `https://www.linkedin.com/in/andy-boss-b89856/recent-activity/all/` | LinkedIn activity feed URL (listener) |
+| `SS_FEED_URL` | `https://www.linkedin.com/feed/` | LinkedIn newsfeed URL (scout) |
 
 ## Unloading
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.sovereignsignal.listener.plist
+launchctl unload ~/Library/LaunchAgents/com.sovereignsignal.scout.plist
 launchctl unload ~/Library/LaunchAgents/com.sovereignsignal.portforward.plist
 ```
