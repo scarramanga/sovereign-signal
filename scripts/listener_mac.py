@@ -14,7 +14,7 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 import httpx
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 SS_API_URL = os.environ.get("SS_API_URL", "http://localhost:8080")
 SS_LINKEDIN_PROFILE = os.environ.get(
@@ -37,6 +37,89 @@ def load_session() -> tuple[list[dict], str]:
     return cookies, user_agent
 
 
+def safe_goto(page, url: str, ready_selector: str | None = None) -> bool:
+    """Navigate to a LinkedIn URL, tolerating SPA client-side redirects.
+
+    LinkedIn often starts its own navigation before Playwright's goto commits,
+    which aborts the request (net::ERR_ABORTED / "frame was detached"). That is
+    not a real failure — the document is usually fine once it settles, so we
+    swallow the abort and continue. Any other error is re-raised. Returns True
+    if the page looks usable (ready_selector appeared, or none was required).
+    """
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    except PlaywrightError as exc:
+        msg = str(exc)
+        if "ERR_ABORTED" in msg or "frame was detached" in msg:
+            print(f"WARN: goto {url} aborted by SPA redirect, continuing")
+            page.wait_for_timeout(3000)
+        else:
+            raise
+    if ready_selector:
+        try:
+            page.wait_for_selector(ready_selector, timeout=15000)
+        except PlaywrightError:
+            return False
+    return True
+
+
+def _normalize(s: str) -> str:
+    """Collapse whitespace for robust text comparison."""
+    return " ".join((s or "").split())
+
+
+def find_reply_submit(composer):
+    """Locate the reply composer's submit button.
+
+    Deliberately avoids the comments-comment-box__submit-button class, which
+    was broken in PR #44. Instead it scopes to the composer's enclosing form
+    (or comment-box container) and matches the primary action button by
+    accessible name — Reply / Comment / Post — which excludes 'Repost' and the
+    page-level 'Start a post'. Selector precision here is only best-effort; the
+    real safety net is reply_is_posted() verification after the click.
+    """
+    name_re = re.compile(r"\b(Reply|Comment|Post)\b", re.IGNORECASE)
+    for scope_xpath in (
+        "xpath=ancestor::form[1]",
+        "xpath=ancestor::*[contains(@class, 'comment-box')][1]",
+    ):
+        box = composer.locator(scope_xpath)
+        if box.count() == 0:
+            continue
+        btn = box.get_by_role("button", name=name_re)
+        if btn.count() > 0:
+            return btn.last
+    return None
+
+
+def reply_is_posted(page, thread, reply_text: str) -> bool:
+    """Verify the reply actually rendered as a comment — the real safety net.
+
+    The composer is a .ql-editor; posted comments render in
+    .comments-comment-item__main-content. Finding our text in a rendered
+    comment node (not the composer) means the submit genuinely landed. Checks
+    the commenter's thread subtree first, then the whole page, since the reply
+    can render in a sibling list node.
+    """
+    target = _normalize(reply_text)
+    if not target:
+        return False
+    selector = "span.comments-comment-item__main-content"
+    for scope in (thread, page):
+        try:
+            items = scope.locator(selector)
+            count = items.count()
+        except PlaywrightError:
+            continue
+        for i in range(count):
+            try:
+                if target in _normalize(items.nth(i).inner_text()):
+                    return True
+            except PlaywrightError:
+                continue
+    return False
+
+
 def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict]:
     """Scrape Andy's recent LinkedIn posts and their comments using Playwright."""
     comments_found: list[dict] = []
@@ -52,7 +135,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         context.add_cookies(cookies)
 
         page = context.new_page()
-        page.goto(SS_LINKEDIN_PROFILE, wait_until="domcontentloaded")
+        safe_goto(page, SS_LINKEDIN_PROFILE, ready_selector="a[href*='/feed/update/']")
         page.wait_for_timeout(8000)
 
         # Collect post links from the activity feed (up to 5)
@@ -76,7 +159,7 @@ def scrape_posts_and_comments(cookies: list[dict], user_agent: str) -> list[dict
         # Visit each post and scrape comments
         for post_url in post_urls:
             try:
-                page.goto(post_url, wait_until="domcontentloaded")
+                safe_goto(page, post_url)
                 page.wait_for_timeout(5000)
 
                 # Switch sort order to "Most recent" if the control exists
@@ -274,7 +357,10 @@ def poll_and_post(cookies: list[dict]) -> None:
                 print(f"Posting reply to {commenter_name} on {post_url}")
 
                 page = context.new_page()
-                page.goto(post_url, wait_until="domcontentloaded")
+                if not safe_goto(
+                    page, post_url, ready_selector="article.comments-comment-entity"
+                ):
+                    raise Exception(f"comments did not load for {post_url}")
                 page.wait_for_timeout(5000)
 
                 # Load all comments before searching for commenter
@@ -304,36 +390,46 @@ def poll_and_post(cookies: list[dict]) -> None:
 
                 page.wait_for_timeout(2000)
 
-                # Type reply into the composer
-                composer = page.locator(
-                    "div.ql-editor[contenteditable='true']"
-                ).last
+                # Type reply into the composer. Prefer the reply box inside the
+                # commenter's thread; fall back to the last editor on the page.
+                composer = thread.locator("div.ql-editor[contenteditable='true']")
+                if composer.count() == 0:
+                    composer = page.locator("div.ql-editor[contenteditable='true']")
+                composer = composer.last
                 composer.click()
                 composer.type(reply_text)
                 page.wait_for_timeout(1000)
 
-                # Click the Post/Submit button
-                submit_btn = page.locator("button:has-text('Post')")
-                if submit_btn.count() > 0:
-                    submit_btn.first.click()
-                    page.wait_for_timeout(3000)
+                # Submit. The selector is best-effort (see find_reply_submit);
+                # the verification below is what actually gates success.
+                submit_btn = find_reply_submit(composer)
+                if submit_btn is None:
+                    raise Exception("reply submit button not found")
+                submit_btn.click()
+                page.wait_for_timeout(4000)
 
-                    # Mark as posted only after successful submission
-                    mark_url = f"{SS_API_URL}/approvals/mark-posted"
-                    mark_resp = httpx.post(
-                        mark_url,
-                        json={"approval_token": approval_token},
-                        timeout=30,
+                # Real safety net: only report success if the reply actually
+                # rendered as a comment. Otherwise raise so it is logged as an
+                # error, left unmarked, and retried on the next run.
+                if not reply_is_posted(page, thread, reply_text):
+                    raise Exception(
+                        f"submit did not produce a posted comment for {commenter_name}"
                     )
-                    if mark_resp.status_code == 200:
-                        print(f"Posted reply to {commenter_name}")
-                    else:
-                        print(
-                            f"ERROR: mark-posted returned {mark_resp.status_code}: "
-                            f"{mark_resp.text}"
-                        )
+
+                # Confirmed posted — mark it so it is not retried.
+                mark_url = f"{SS_API_URL}/approvals/mark-posted"
+                mark_resp = httpx.post(
+                    mark_url,
+                    json={"approval_token": approval_token},
+                    timeout=30,
+                )
+                if mark_resp.status_code == 200:
+                    print(f"Posted reply to {commenter_name}")
                 else:
-                    raise Exception("Submit button not found")
+                    print(
+                        f"ERROR: mark-posted returned {mark_resp.status_code}: "
+                        f"{mark_resp.text}"
+                    )
 
             except Exception as exc:
                 print(f"ERROR: Failed to post reply to {row.get('commenter_name', '?')}: {exc}")
